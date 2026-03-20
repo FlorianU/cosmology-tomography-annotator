@@ -5,14 +5,20 @@ import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
 
 # --- 1. Configuration ---
-fits_filename = 'output_cube.fits' 
-output_folder = 'slices'
+# Get the exact folder where this Python script is located
+script_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Attach that folder path to the filenames
+fits_filename = os.path.join(script_dir, 'output_cube.fits') 
+output_folder_z = os.path.join(script_dir, 'slices_Z')
+output_folder_y = os.path.join(script_dir, 'slices_Y')
 colormap = 'magma'
 
-# How many raw FITS slices should be squashed into 1 image?
-slices_to_fuse = 6  
+# How many raw FITS slices should be squashed into 1 image along the primary Z-axis?
+slices_to_fuse_z = 5  
 
-os.makedirs(output_folder, exist_ok=True)
+os.makedirs(output_folder_z, exist_ok=True)
+os.makedirs(output_folder_y, exist_ok=True)
 
 print(f"Opening {fits_filename} with Memory Mapping...")
 hdul = fits.open(fits_filename, memmap=True)
@@ -25,12 +31,17 @@ if is_4d:
 else:
     z_slices, y_pixels, x_pixels = data_shape[0], data_shape[1], data_shape[2]
 
-final_image_count = int(np.ceil(z_slices / slices_to_fuse))
-print(f"Original Z-slices: {z_slices}")
-print(f"Fusing {slices_to_fuse} slices together per image...")
-print(f"New Total Output Images: {final_image_count}")
+# Calculate target number of images based on Z
+final_image_count = int(np.ceil(z_slices / slices_to_fuse_z))
 
-# --- NEW: RAM-Safe Global Mean Calculation ---
+# Dynamically calculate Y fusion rate so it generates the exact same number of images
+slices_to_fuse_y = y_pixels / final_image_count
+
+print(f"Original Dimensions: Z={z_slices}, Y={y_pixels}, X={x_pixels}")
+print(f"Targeting {final_image_count} total output images per axis.")
+print(f"Fusing ~{slices_to_fuse_z} slices for Z-axis, and ~{slices_to_fuse_y:.1f} slices for Y-axis.")
+
+# --- 2. RAM-Safe Global Mean Calculation ---
 print("\nCalculating global mean (memory-safe)...")
 total_sum = 0.0
 total_pixels = 0
@@ -41,44 +52,35 @@ for i in range(z_slices):
     else:
         slice_data = hdul[0].data[i, :, :]
     
-    # Using nansum just in case there are blank pixels/NaNs in the FITS
     total_sum += np.nansum(slice_data)
     total_pixels += np.count_nonzero(~np.isnan(slice_data))
 
 global_mean = total_sum / total_pixels
 print(f"Global Mean Density: {global_mean:.4e}")
 
-
-# --- 2. Helper Function for Math ---
+# --- 3. Helper Function for Math ---
 def process_slice(raw_2d_slice):
     """Applies cleaning, smoothing, and log stretch."""
     clean = np.nan_to_num(raw_2d_slice, nan=0.0, posinf=0.0, neginf=0.0)
     smoothed = gaussian_filter(clean, sigma=0.6) 
-    print(f"max: {np.max(smoothed)}") # Optional debugging
-    print(f"min: {np.min(smoothed)}") # Optional debugging
-    #logversion = np.log10(smoothed + 1)
     clean_clipped = np.clip(smoothed, a_min=1e-10, a_max=None)
     return np.log10(clean_clipped)
 
-# --- 3. Estimate Global Contrast (Using Fused Chunks) ---
+# --- 4. Estimate Global Contrast (Using Z-Axis Chunks) ---
 print("\nEstimating global contrast limits using sample chunks...")
 sample_indices = np.linspace(0, final_image_count - 1, 5, dtype=int)
 valid_pixels = []
 
 for i in sample_indices:
-    start_z = i * slices_to_fuse
-    end_z = min(start_z + slices_to_fuse, z_slices)
+    start_z = i * slices_to_fuse_z
+    end_z = min(start_z + slices_to_fuse_z, z_slices)
     
-    # Pull a CHUNK of slices into RAM
     if is_4d:
         chunk = hdul[0].data[0, start_z:end_z, :, :]
     else:
         chunk = hdul[0].data[start_z:end_z, :, :]
         
-    # NEW: Divide the chunk by the global mean (element-wise)
     chunk = chunk / global_mean
-        
-    # FUSE THEM: Maximum Intensity Projection
     fused_raw_slice = np.nanmax(chunk, axis=0)
     
     processed_slice = process_slice(fused_raw_slice)
@@ -94,35 +96,52 @@ else:
 
 print(f"Visual Contrast Limits set to: vmin={vmin:.2f}, vmax={vmax:.2f}\n")
 
-# --- 4. Process and Save Fused Slices ---
-print(f"Extracting {final_image_count} fused images to '{output_folder}/'...")
-
+# --- 5. Process and Save Z-Axis (XY Plane) ---
+print(f"Extracting {final_image_count} Z-axis images to '{output_folder_z}/'...")
 for i in range(final_image_count):
-    start_z = i * slices_to_fuse
-    end_z = min(start_z + slices_to_fuse, z_slices)
+    start_z = i * slices_to_fuse_z
+    end_z = min(start_z + slices_to_fuse_z, z_slices)
     
-    # Pull the chunk
     if is_4d:
         chunk = hdul[0].data[0, start_z:end_z, :, :]
     else:
         chunk = hdul[0].data[start_z:end_z, :, :]
     
-    # NEW: Divide the chunk by the global mean
     chunk = chunk / global_mean
-    
-    # Fuse the chunk into a single 2D array
     fused_raw_slice = np.nanmax(chunk, axis=0)
-    
-    # Apply math
     final_image = process_slice(fused_raw_slice)
     
-    # Save it sequentially
     filename = f"slice_{i:03d}.png"
-    filepath = os.path.join(output_folder, filename)
+    filepath = os.path.join(output_folder_z, filename)
     plt.imsave(filepath, final_image, cmap=colormap, origin='lower', vmin=vmin, vmax=vmax)
     
     if i % 10 == 0:
-        print(f"Processed {i}/{final_image_count} fused images...")
+        print(f"Z-Axis: Processed {i}/{final_image_count} images...")
+
+# --- 6. Process and Save Y-Axis (XZ Plane) ---
+print(f"\nExtracting {final_image_count} Y-axis images to '{output_folder_y}/'...")
+for i in range(final_image_count):
+    start_y = int(i * slices_to_fuse_y)
+    end_y = int(min(start_y + slices_to_fuse_y, y_pixels))
+    
+    # Notice the slicing syntax changes here to slice along the Y dimension!
+    if is_4d:
+        chunk = hdul[0].data[0, :, start_y:end_y, :]
+    else:
+        chunk = hdul[0].data[:, start_y:end_y, :]
+    
+    chunk = chunk / global_mean
+    
+    # The chunk shape is (Z, Y_fused, X). We fuse along the Y-axis (axis=1)
+    fused_raw_slice = np.nanmax(chunk, axis=1)
+    final_image = process_slice(fused_raw_slice)
+    
+    filename = f"slice_{i:03d}.png"
+    filepath = os.path.join(output_folder_y, filename)
+    plt.imsave(filepath, final_image, cmap=colormap, origin='lower', vmin=vmin, vmax=vmax)
+    
+    if i % 10 == 0:
+        print(f"Y-Axis: Processed {i}/{final_image_count} images...")
 
 hdul.close()
-print(f"\nExtraction complete! Successfully generated {final_image_count} images.")
+print(f"\nExtraction complete! Both folders are ready for the web application.")

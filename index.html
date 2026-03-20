@@ -8,10 +8,23 @@
   </head>
   <body>
     <div id="sidebar">
+      <h2>Participant Info</h2>
+      <div class="control-group">
+        <label for="inputParticipantID" style="font-size: 12px; color: #ccc">Participant ID:</label>
+        <input type="text" id="inputParticipantID" class="config-input" placeholder="e.g., P01" />
+      </div>
       <h2>Dataset Config</h2>
       <div class="control-group">
         <label for="inputTotalSlices" style="font-size: 12px; color: #ccc">Amount of Slices:</label>
-        <input type="number" id="inputTotalSlices" class="config-input" value="100" min="1" max="5000" />
+        <input type="number" id="inputTotalSlices" class="config-input" value="50" min="1" max="5000" />
+      </div>
+
+      <h2>Viewing Axis</h2>
+      <div class="control-group radio-container">
+        <label><input type="radio" name="axisGroup" value="Z" checked /> 
+          <span class="color-box" style="background: #fff"></span> Z-Axis (Draw)</label>
+        <label><input type="radio" name="axisGroup" value="Y" /> 
+          <span class="color-box" style="background: #888"></span> Y-Axis (View Only)</label>
       </div>
 
       <h2>Rendering Options</h2>
@@ -23,6 +36,7 @@
       <h2>Task Controls</h2>
       <div class="control-group">
         <button id="btnStart" disabled>LOADING IMAGES...</button>
+        <button id="btnToggleAnnotations" disabled style="background-color: #555;">HIDE ANNOTATIONS</button>
         <button id="btnFinish" disabled>FINISH & EXPORT</button>
         <button id="btnRestart" disabled>RESTART TASK</button>
       </div>
@@ -42,7 +56,7 @@
       <h2>Brush Size</h2>
       <div class="control-group">
         <input type="range" id="brushSize" min="1" max="50" value="10" style="width: 100%" />
-        <p style="font-size: 11px; color: #888; margin-top: 10px;"><b>Scroll:</b> Zoom In/Out<br><b>Mid-Click / Alt+Click:</b> Pan</p>
+        <p style="font-size: 11px; color: #888; margin-top: 10px;"><b>Scroll:</b> Zoom In/Out<br><b>Mid-Click:</b> Pan</p>
       </div>
     </div>
 
@@ -51,6 +65,8 @@
         <div id="overlay-text">Loading Dataset...</div>
         <div id="overlay-subtext">Please wait while images are cached to memory.</div>
       </div>
+      
+      <div id="view-only-banner">Y-AXIS: REFERENCE VIEW ONLY (DRAWING DISABLED)</div>
 
       <div id="canvas-container">
         <div id="zoom-wrapper">
@@ -60,11 +76,11 @@
 
         <div id="minimap-container">
           <div id="reference-cube">
-            <div class="cube-face front"></div>
+            <div class="cube-face front">Z</div>
             <div class="cube-face back"></div>
-            <div class="cube-face left"></div>
+            <div class="cube-face left">X</div>
             <div class="cube-face right"></div>
-            <div class="cube-face top"></div>
+            <div class="cube-face top">Y</div>
             <div class="cube-face bottom"></div>
             <div id="moving-slice"></div> 
           </div>
