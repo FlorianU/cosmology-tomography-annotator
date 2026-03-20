@@ -1,0 +1,216 @@
+/* UI Styling - Dark Mode, utilitarian aesthetic */
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #121212;
+  color: #e0e0e0;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+#sidebar {
+  width: 250px;
+  background-color: #1e1e1e;
+  padding: 20px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #333;
+  overflow-y: auto;
+  z-index: 20;
+}
+h2 {
+  font-size: 14px;
+  margin-top: 0;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border-bottom: 1px solid #333;
+  padding-bottom: 5px;
+}
+
+/* Controls */
+.control-group {
+  margin-bottom: 25px;
+}
+button {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 10px;
+  border: none;
+  border-radius: 4px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: 0.2s;
+}
+#btnStart { background-color: #2e7d32; color: white; }
+#btnStart:hover { background-color: #1b5e20; }
+#btnStart:disabled { background-color: #1a3c1c; color: #555; cursor: not-allowed; }
+
+#btnFinish { background-color: #1976d2; color: white; }
+#btnFinish:hover { background-color: #1565c0; }
+#btnFinish:disabled { background-color: #1c3654; color: #555; cursor: not-allowed; }
+
+#btnRestart { background-color: #f57c00; color: white; margin-top: 15px; }
+#btnRestart:hover { background-color: #e65100; }
+#btnRestart:disabled { background-color: #5c340a; color: #555; cursor: not-allowed; }
+
+/* Configuration Input */
+.config-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  margin-top: 5px;
+  background: #2a2a2a;
+  color: white;
+  border: 1px solid #444;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 14px;
+}
+.config-input:disabled { background: #1a1a1a; color: #555; cursor: not-allowed; }
+
+/* Labels */
+.radio-container { display: flex; flex-direction: column; gap: 8px; }
+.radio-container label { display: flex; align-items: center; cursor: pointer; font-size: 14px; }
+.radio-container input[type="radio"] { margin-right: 10px; }
+.color-box { width: 12px; height: 12px; display: inline-block; margin-right: 8px; border-radius: 2px; }
+.eraser-box { border: 1px solid #aaa; width: 10px; height: 10px; background: transparent; }
+
+/* Main Workspace */
+#workspace {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* Zoom & Pan Containers */
+#canvas-container {
+  flex-grow: 1;
+  position: relative;
+  background-color: #000;
+  overflow: hidden; 
+  cursor: grab; 
+}
+#canvas-container:active {
+  cursor: grabbing;
+}
+
+#zoom-wrapper {
+  position: absolute;
+  top: 0; left: 0;
+  transform-origin: 0 0; 
+  width: 1046px; 
+  height: 952px; 
+}
+
+/* Overlapping Canvases */
+canvas {
+  position: absolute;
+  top: 0; left: 0;
+}
+#bgCanvas { z-index: 1; }
+#fgCanvas { 
+  z-index: 2; 
+  pointer-events: auto; 
+}
+
+/* Overlay to block interaction before starting */
+#overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 24px;
+  color: white;
+  text-align: center;
+  flex-direction: column;
+}
+#overlay-subtext { font-size: 14px; color: #aaa; margin-top: 10px; }
+
+/* Slider and Navigation */
+#footer {
+  height: 70px;
+  background-color: #1e1e1e;
+  border-top: 1px solid #333;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  z-index: 20;
+}
+.nav-btn {
+  width: auto;
+  padding: 10px 20px;
+  margin: 0 10px;
+  background-color: #333;
+  color: white;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.nav-btn:hover { background-color: #555; }
+.nav-btn:disabled { background-color: #1a1a1a; color: #444; cursor: not-allowed; }
+#sliceSlider { flex-grow: 1; margin: 0 10px; cursor: pointer; }
+#sliceLabel { font-family: monospace; font-size: 16px; width: 80px; text-align: right; flex-shrink: 0; }
+
+/* Floating 3D Reference Minimap */
+#minimap-container {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 100px;
+  height: 100px;
+  background: rgba(30, 30, 30, 0.7);
+  border: 1px solid #444;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  perspective: 600px;
+  z-index: 30;
+  pointer-events: none;
+}
+
+#reference-cube {
+  width: 60px;
+  height: 60px;
+  position: relative;
+  transform-style: preserve-3d;
+  transform: rotateX(-20deg) rotateY(-45deg);
+}
+
+.cube-face {
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.front  { transform: translateZ(30px); border-color: rgba(255, 255, 255, 0.6); }
+.back   { transform: translateZ(-30px); }
+.left   { transform: rotateY(-90deg) translateZ(30px); }
+.right  { transform: rotateY(90deg) translateZ(30px); }
+.top    { transform: rotateX(90deg) translateZ(30px); }
+.bottom { transform: rotateX(-90deg) translateZ(30px); }
+
+#moving-slice {
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  background: rgba(51, 153, 255, 0.6);
+  border: 1px solid #3399ff;
+  box-shadow: 0 0 10px rgba(51, 153, 255, 0.5);
+  transform: translateZ(-30px); 
+  transition: transform 0.1s linear;
+}
