@@ -1,0 +1,66 @@
+import numpy as np
+from astropy.io import fits
+
+def format_and_scale_for_idavie(input_filepath, output_filepath):
+    """
+    Moves 3D data to the Primary HDU and pre-scales the values 
+    so iDaVIE renders it perfectly without manual tweaking.
+    """
+    print(f"Opening {input_filepath}...")
+    
+    # --- 1. Define your thresholds here ---
+    # Everything below vmin becomes exactly 0.0 (Invisible/Black in iDaVIE)
+    # Everything above vmax becomes exactly 1.0 (Maximum brightness)
+    vmin = -0.5  # Your background cutoff from earlier
+    vmax = 1300   # The peak density of the filaments
+    
+    with fits.open(input_filepath) as hdul:
+        cube_data = None
+        cube_header = None
+        
+        # Find the 3D data array
+        for hdu in hdul:
+            if 'NAXIS' in hdu.header and hdu.header['NAXIS'] == 3:
+                cube_data = hdu.data
+                cube_header = hdu.header
+                break
+                
+        if cube_data is None:
+            print("Error: Could not find any 3D data in this file.")
+            return
+
+    print(f"Original data range: Min={np.nanmin(cube_data):.2f}, Max={np.nanmax(cube_data):.2f}")
+    print(f"Applying thresholds (vmin={vmin}, vmax={vmax}) and normalizing...")
+
+    # --- 2. Process the Data ---
+    # Replace NaNs with the minimum value just in case
+    clean_data = np.nan_to_num(cube_data, nan=vmin)
+    
+    # Clip the data (crush the background and cap the bright spots)
+    clipped_data = np.clip(clean_data, a_min=vmin, a_max=vmax)
+    
+    # Normalize the data to range strictly from 0.0 to 1.0
+    normalized_data = (clipped_data - vmin) / (vmax - vmin)
+    
+    # Convert to float32 (VR engines run much faster with 32-bit floats)
+    final_data = normalized_data.astype(np.float32)
+
+    print(f"New data range: Min={np.min(final_data):.2f}, Max={np.max(final_data):.2f}")
+
+    # --- 3. Save the FITS File ---
+    print("Moving scaled data to Primary HDU...")
+    new_primary_hdu = fits.PrimaryHDU(data=final_data, header=cube_header)
+    
+    # Update the header to reflect the changes
+    new_primary_hdu.header['HISTORY'] = f'Pre-scaled for VR: vmin={vmin}, vmax={vmax}'
+    new_primary_hdu.header['HISTORY'] = 'Normalized to 0.0 - 1.0'
+    
+    new_hdul = fits.HDUList([new_primary_hdu])
+    new_hdul.writeto(output_filepath, overwrite=True)
+    print(f"Success! Saved optimized iDaVIE cube to: {output_filepath}")
+
+if __name__ == "__main__":
+    input_file = 'eagle_delta_512.fits'
+    output_file = 'eagle_delta_512_idavie_new.fits'
+    
+    format_and_scale_for_idavie(input_file, output_file)

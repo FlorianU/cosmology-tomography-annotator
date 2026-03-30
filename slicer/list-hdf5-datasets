@@ -1,0 +1,27 @@
+import h5py
+
+def list_hdf5_contents(file_path):
+    """
+    Recursively lists all groups and datasets inside an HDF5 file.
+    """
+    def print_info(name, obj):
+        if isinstance(obj, h5py.Dataset):
+            print(f"Dataset: /{name} | Shape: {obj.shape} | Type: {obj.dtype}")
+        elif isinstance(obj, h5py.Group):
+            print(f"Group:   /{name}")
+
+    try:
+        with h5py.File(file_path, 'r') as f:
+            print(f"--- Contents of {file_path} ---")
+            # visititems applies the print_info function to every item in the file
+            f.visititems(print_info)
+            print("-" * 40)
+    except FileNotFoundError:
+        print(f"Error: The file '{file_path}' was not found.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+if __name__ == "__main__":
+    # Replace with the path to your HDF5 file
+    h5_filename = 'eagle_delta_512.hdf5' 
+    list_hdf5_contents(h5_filename)

@@ -1,0 +1,50 @@
+import h5py
+from astropy.io import fits
+
+def velocity_hdf5_to_mef_fits(h5_file_path, fits_file_path):
+    """
+    Reads multiple velocity field datasets from an HDF5 file 
+    and saves them as a Multi-Extension FITS (MEF) file.
+    """
+    # The specific datasets you listed
+    dataset_names = ['delta_dm']
+    
+    try:
+        with h5py.File(h5_file_path, 'r') as h5f:
+            # 1. Create a Primary HDU (Header Data Unit). 
+            # In MEF files, the primary HDU is often left empty to act as a global header.
+            primary_hdu = fits.PrimaryHDU()
+            primary_hdu.header['HISTORY'] = 'Converted from HDF5 velocity field'
+            hdulist = fits.HDUList([primary_hdu])
+            
+            # 2. Loop through your datasets and add them as Image Extensions
+            for name in dataset_names:
+                if name in h5f:
+                    # Extract the (511, 511, 511) float32 array
+                    data_cube = h5f[name][:]
+                    
+                    # Create an ImageHDU and assign the dataset name as the EXTNAME
+                    # This allows you to call the data by its name later
+                    image_hdu = fits.ImageHDU(data=data_cube, name=name)
+                    hdulist.append(image_hdu)
+                    
+                    print(f"Added: '{name}' | Shape: {data_cube.shape}")
+                else:
+                    print(f"Warning: Dataset '/{name}' not found in the HDF5 file. Skipping.")
+            
+            # 3. Write the entire HDUList to a single FITS file
+            hdulist.writeto(fits_file_path, overwrite=True)
+            print("-" * 40)
+            print(f"Success! All components saved to '{fits_file_path}'")
+
+    except FileNotFoundError:
+        print(f"Error: The file '{h5_file_path}' was not found.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+if __name__ == "__main__":
+    # Define your file paths here
+    h5_filename = 'eagle_delta_512.hdf5' 
+    fits_filename = 'eagle_delta_512.fits'
+    
+    velocity_hdf5_to_mef_fits(h5_filename, fits_filename)

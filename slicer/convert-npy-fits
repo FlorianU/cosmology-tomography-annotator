@@ -1,0 +1,39 @@
+import os
+import numpy as np
+from astropy.io import fits
+
+def npy_to_fits(npy_filepath, fits_filepath):
+    """
+    Loads a NumPy array from an .npy file and saves it as a FITS data cube.
+    """
+    if not os.path.exists(npy_filepath):
+        print(f"Error: The file '{npy_filepath}' does not exist.")
+        return
+
+    print(f"Loading '{npy_filepath}'...")
+    
+    # 1. Load the NumPy array
+    data_cube = np.load(npy_filepath)
+    print(f"Loaded array with shape: {data_cube.shape} and type: {data_cube.dtype}")
+
+    # 2. Create the Primary HDU (Header Data Unit)
+    hdu = fits.PrimaryHDU(data_cube)
+    
+    # Optional: Add some basic metadata to the header
+    hdu.header['HISTORY'] = 'Converted directly from a .npy file'
+    
+    # 3. Create an HDUList and write it to disk
+    hdulist = fits.HDUList([hdu])
+    
+    print(f"Saving to '{fits_filepath}'...")
+    # overwrite=True ensures you don't get an error if the fits file already exists
+    hdulist.writeto(fits_filepath, overwrite=True) 
+    
+    print("Success! Conversion complete.")
+
+if __name__ == "__main__":
+    # Define your input and output paths here
+    input_npy = 'input_cube.npy'
+    output_fits = 'output_cube_npy.fits'
+    
+    npy_to_fits(input_npy, output_fits)

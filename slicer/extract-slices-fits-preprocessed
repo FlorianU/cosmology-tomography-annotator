@@ -1,0 +1,117 @@
+import os
+import shutil
+import numpy as np
+from astropy.io import fits
+import matplotlib.pyplot as plt
+from scipy.ndimage import gaussian_filter
+
+# --- 1. Configuration & Paths ---
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir) 
+
+fits_filename = os.path.join(script_dir, 'experiment_cube_1.fits') # Or _idavie.fits
+output_folder_z = os.path.join(project_root, 'slices_Z')
+output_folder_y = os.path.join(project_root, 'slices_Y')
+
+colormap = 'magma'     
+slices_to_fuse = 3    
+crop_factor = 1      
+
+# --- 2. LOG-SPACE Thresholds ---
+# Because we are applying np.log10(), our scale is completely different now!
+# A raw density of 0.001 becomes -3.0. A raw density of 1.0 becomes 0.0.
+vmin_log = -3.8  # The Floor. Raise this (e.g., -1.5) if the background is too noisy.
+vmax_log = -0.9999  # The Ceiling. Lower this (e.g., -0.5) to make everything brighter.
+
+def clear_and_create_dir(dir_path):
+    if os.path.exists(dir_path):
+        for filename in os.listdir(dir_path):
+            file_path = os.path.join(dir_path, filename)
+            try:
+                if os.path.isfile(file_path): os.unlink(file_path)
+                elif os.path.isdir(file_path): shutil.rmtree(file_path)
+            except Exception as e:
+                pass
+    else:
+        os.makedirs(dir_path, exist_ok=True)
+
+clear_and_create_dir(output_folder_z)
+clear_and_create_dir(output_folder_y)
+
+# --- 3. Open FITS ---
+print(f"Opening {fits_filename}...")
+hdul = fits.open(fits_filename, memmap=True)
+
+data_cube = None
+for hdu in hdul:
+    if 'NAXIS' in hdu.header and hdu.header['NAXIS'] == 3:
+        data_cube = hdu.data
+        break
+
+if data_cube is None:
+    raise ValueError("Could not find any 3D data (NAXIS=3) in this file.")
+
+orig_z, orig_y, orig_x = data_cube.shape
+
+discard_factor = (1.0 - crop_factor) / 2.0
+z_start, z_end = int(orig_z * discard_factor), int(orig_z * (1.0 - discard_factor))
+y_start, y_end = int(orig_y * discard_factor), int(orig_y * (1.0 - discard_factor))
+x_start, x_end = int(orig_x * discard_factor), int(orig_x * (1.0 - discard_factor))
+
+z_slices = z_end - z_start
+y_pixels = y_end - y_start
+
+final_image_count = int(np.ceil(z_slices / slices_to_fuse))
+slices_to_fuse_y = y_pixels / final_image_count
+
+# --- 4. The Logarithmic Processing Function ---
+def process_log_slice(raw_2d_slice):
+    # 1. Clean out any weird NaN values
+    clean = np.nan_to_num(raw_2d_slice, nan=1e-10) 
+    
+    # 2. Prevent log(0) or log(negative) errors by clamping the bottom
+    # Everything below 1e-5 is forced to 1e-5
+    clean_positive = np.clip(clean, a_min=1e-5, a_max=None)
+    
+    # 3. Apply Base-10 Logarithmic Scaling
+    log_scaled = np.log10(clean_positive)
+    
+    # 4. Smooth to make the filaments look cinematic and cohesive
+    smoothed = gaussian_filter(log_scaled, sigma=0.5) 
+    
+    return smoothed
+
+print(f"Applying Logarithmic Scale limits: vmin={vmin_log}, vmax={vmax_log}")
+
+# --- 5. Extract Z-Axis (XY Plane) ---
+print(f"Extracting {final_image_count} Z-axis images...")
+for i in range(final_image_count):
+    chunk_start = z_start + (i * slices_to_fuse)
+    chunk_end = min(chunk_start + slices_to_fuse, z_end)
+    
+    chunk = data_cube[chunk_start:chunk_end, y_start:y_end, x_start:x_end]
+    fused_raw_slice = np.nanmax(chunk, axis=0)
+    
+    # Process the 2D array with our new log math
+    final_image = process_log_slice(fused_raw_slice)
+    
+    filepath = os.path.join(output_folder_z, f"slice_{i:03d}.png")
+    # Feed the log-space vmin/vmax into matplotlib
+    plt.imsave(filepath, final_image, cmap=colormap, origin='lower', vmin=vmin_log, vmax=vmax_log)
+
+# --- 6. Extract Y-Axis (XZ Plane) ---
+print(f"Extracting {final_image_count} Y-axis images...")
+for i in range(final_image_count):
+    chunk_start = y_start + int(i * slices_to_fuse_y)
+    chunk_end = min(y_start + int((i + 1) * slices_to_fuse_y), y_end)
+    
+    chunk = data_cube[z_start:z_end, chunk_start:chunk_end, x_start:x_end]
+    fused_raw_slice = np.nanmax(chunk, axis=1)
+    
+    final_image = process_log_slice(fused_raw_slice)
+    
+    filepath = os.path.join(output_folder_y, f"slice_{i:03d}.png")
+    plt.imsave(filepath, final_image, cmap=colormap, origin='lower', vmin=vmin_log, vmax=vmax_log)
+
+hdul.close()
+print("Slicing complete! Logarithmic compression applied.")

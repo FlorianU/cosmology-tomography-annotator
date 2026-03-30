@@ -1,0 +1,179 @@
+import os
+import shutil
+import numpy as np
+from astropy.io import fits
+import matplotlib.pyplot as plt
+from scipy.ndimage import gaussian_filter
+
+# --- 1. Configuration & Paths ---
+script_dir = os.path.dirname(os.path.abspath(__file__))
+# Navigate one folder up to the root project directory
+project_root = os.path.dirname(script_dir) 
+
+# CHANGE INPUT FILE NAME
+fits_filename = os.path.join(script_dir, 'eagle_delta_512_idavie_1.fits') 
+
+# Target the folders in the parent directory
+output_folder_z = os.path.join(project_root, 'slices_Z')
+output_folder_y = os.path.join(project_root, 'slices_Y')
+
+colormap = 'magma'
+slices_to_fuse_z = 3  
+data_extension = 'delta_dm' # Change this to the desired dataset name.
+
+def clear_and_create_dir(dir_path):
+    """Deletes all contents of a directory if it exists, then ensures it exists."""
+    if os.path.exists(dir_path):
+        print(f"Clearing contents of: {dir_path}")
+        for filename in os.listdir(dir_path):
+            file_path = os.path.join(dir_path, filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+            except Exception as e:
+                print(f"Failed to delete {file_path}. Reason: {e}")
+    else:
+        os.makedirs(dir_path, exist_ok=True)
+
+# Clear old slices and prepare the folders
+clear_and_create_dir(output_folder_z)
+clear_and_create_dir(output_folder_y)
+
+# --- 2. Open FITS and Calculate Crop ---
+print(f"Opening {fits_filename} (Extension: {data_extension}) with Memory Mapping...")
+hdul = fits.open(fits_filename, memmap=True)
+
+data_shape = hdul[data_extension].shape
+is_4d = len(data_shape) == 4
+
+if is_4d:
+    orig_z, orig_y, orig_x = data_shape[1], data_shape[2], data_shape[3]
+else:
+    orig_z, orig_y, orig_x = data_shape[0], data_shape[1], data_shape[2]
+
+# ADJUST CROP FACTOR HERE (%)
+crop_factor = 1
+discard_factor = (1.0 - crop_factor) / 2.0
+
+z_start = int(orig_z * discard_factor)
+z_end = int(orig_z * (1.0 - discard_factor))
+y_start = int(orig_y * discard_factor)
+y_end = int(orig_y * (1.0 - discard_factor))
+x_start = int(orig_x * discard_factor)
+x_end = int(orig_x * (1.0 - discard_factor))
+
+z_slices = z_end - z_start
+y_pixels = y_end - y_start
+x_pixels = x_end - x_start
+
+print(f"Original Dimensions: Z={orig_z}, Y={orig_y}, X={orig_x}")
+print(f"Cropped (Central 10%): Z={z_slices}, Y={y_pixels}, X={x_pixels}")
+
+final_image_count = int(np.ceil(z_slices / slices_to_fuse_z))
+slices_to_fuse_y = y_pixels / final_image_count
+
+print(f"Targeting {final_image_count} total output images per axis.")
+print(f"Fusing ~{slices_to_fuse_z} slices for Z-axis, and ~{slices_to_fuse_y:.1f} slices for Y-axis.")
+
+# --- 3. RAM-Safe Global Mean Calculation ---
+print("\nCalculating global mean (memory-safe)...")
+total_sum = 0.0
+total_pixels = 0
+
+for i in range(z_start, z_end):
+    if is_4d:
+        slice_data = hdul[data_extension].data[0, i, y_start:y_end, x_start:x_end]
+    else:
+        slice_data = hdul[data_extension].data[i, y_start:y_end, x_start:x_end]
+    
+    total_sum += np.nansum(slice_data)
+    total_pixels += np.count_nonzero(~np.isnan(slice_data))
+
+global_mean = total_sum / total_pixels
+print(f"Global Mean Density: {global_mean:.4e}")
+
+# --- 4. Helper Function for Math --- (ADJUST SIGMA ACCORDING TO DATA CHARACTERISTICS)
+def process_slice(raw_2d_slice):
+    clean = np.nan_to_num(raw_2d_slice, nan=0.0, posinf=0.0, neginf=0.0)
+    smoothed = gaussian_filter(clean, sigma=0.3) 
+    clean_clipped = np.clip(smoothed, a_min=1e-10, a_max=None)
+    return np.log10(clean_clipped)
+
+# --- 5. Estimate Global Contrast ---
+print("\nEstimating global contrast limits using sample chunks...")
+sample_indices = np.linspace(0, final_image_count - 1, 5, dtype=int)
+valid_pixels = []
+
+for i in sample_indices:
+    chunk_start_z = z_start + (i * slices_to_fuse_z)
+    chunk_end_z = min(chunk_start_z + slices_to_fuse_z, z_end)
+    
+    if is_4d:
+        chunk = hdul[data_extension].data[0, chunk_start_z:chunk_end_z, y_start:y_end, x_start:x_end]
+    else:
+        chunk = hdul[data_extension].data[chunk_start_z:chunk_end_z, y_start:y_end, x_start:x_end]
+        
+    chunk = chunk / global_mean
+    fused_raw_slice = np.nanmax(chunk, axis=0)
+    
+    processed_slice = process_slice(fused_raw_slice)
+    mask = processed_slice > -9.9
+    valid_pixels.extend(processed_slice[mask])
+
+if len(valid_pixels) == 0:
+    print("WARNING: All sampled pixels were zero! Check your FITS file.")
+    vmin, vmax = -1, 1
+else:
+    vmin = np.percentile(valid_pixels, 80)
+    vmax = np.percentile(valid_pixels, 99.9)
+
+print(f"Visual Contrast Limits set to: vmin={vmin:.2f}, vmax={vmax:.2f}\n")
+
+# --- 6. Process and Save Cropped Z-Axis (XY Plane) ---
+print(f"Extracting {final_image_count} Z-axis images to '{output_folder_z}'...")
+for i in range(final_image_count):
+    chunk_start_z = z_start + (i * slices_to_fuse_z)
+    chunk_end_z = min(chunk_start_z + slices_to_fuse_z, z_end)
+    
+    if is_4d:
+        chunk = hdul[data_extension].data[0, chunk_start_z:chunk_end_z, y_start:y_end, x_start:x_end]
+    else:
+        chunk = hdul[data_extension].data[chunk_start_z:chunk_end_z, y_start:y_end, x_start:x_end]
+    
+    chunk = chunk / global_mean
+    fused_raw_slice = np.nanmax(chunk, axis=0)
+    final_image = process_slice(fused_raw_slice)
+    
+    filename = f"slice_{i:03d}.png"
+    filepath = os.path.join(output_folder_z, filename)
+    plt.imsave(filepath, final_image, cmap=colormap, origin='lower', vmin=vmin, vmax=vmax)
+    
+    if i % 10 == 0:
+        print(f"Z-Axis: Processed {i}/{final_image_count} images...")
+
+# --- 7. Process and Save Cropped Y-Axis (XZ Plane) ---
+print(f"\nExtracting {final_image_count} Y-axis images to '{output_folder_y}'...")
+for i in range(final_image_count):
+    chunk_start_y = y_start + int(i * slices_to_fuse_y)
+    chunk_end_y = min(y_start + int((i + 1) * slices_to_fuse_y), y_end)
+    
+    if is_4d:
+        chunk = hdul[data_extension].data[0, z_start:z_end, chunk_start_y:chunk_end_y, x_start:x_end]
+    else:
+        chunk = hdul[data_extension].data[z_start:z_end, chunk_start_y:chunk_end_y, x_start:x_end]
+    
+    chunk = chunk / global_mean
+    fused_raw_slice = np.nanmax(chunk, axis=1)
+    final_image = process_slice(fused_raw_slice)
+    
+    filename = f"slice_{i:03d}.png"
+    filepath = os.path.join(output_folder_y, filename)
+    plt.imsave(filepath, final_image, cmap=colormap, origin='lower', vmin=vmin, vmax=vmax)
+    
+    if i % 10 == 0:
+        print(f"Y-Axis: Processed {i}/{final_image_count} images...")
+
+hdul.close()
+print(f"\nExtraction complete! Images placed in root-level folders.")
