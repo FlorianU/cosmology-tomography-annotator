@@ -11,11 +11,11 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir) 
 
 # CHANGE INPUT FILE NAME
-fits_filename = os.path.join(script_dir, 'eagle_delta_512_idavie_1.fits') 
+fits_filename = os.path.join(script_dir, 'playground_cube_1.fits') 
 
 # Target the folders in the parent directory
-output_folder_z = os.path.join(project_root, 'slices_Z')
-output_folder_y = os.path.join(project_root, 'slices_Y')
+output_folder_z = os.path.join(project_root, 'playground_Z')
+output_folder_y = os.path.join(project_root, 'playground_Y')
 
 colormap = 'magma'
 slices_to_fuse_z = 3  

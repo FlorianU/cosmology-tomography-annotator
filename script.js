@@ -40,6 +40,7 @@ const btnPrevSlice = document.getElementById("btnPrevSlice");
 const btnNextSlice = document.getElementById("btnNextSlice");
 const movingSlice = document.getElementById("moving-slice");
 const viewOnlyBanner = document.getElementById("view-only-banner");
+const chkPlayground = document.getElementById("chkPlayground");
 
 const inputParticipantID = document.getElementById("inputParticipantID");
 const btnStart = document.getElementById("btnStart");
@@ -164,11 +165,16 @@ function preloadImages() {
     overlayText.innerText = "Loading Dual-Axis Dataset...";
 
     const axes = ['Z', 'Y'];
+
+    const folderPrefix = chkPlayground.checked ? 'playground_' : 'slices_';
+
     axes.forEach(axis => {
         for (let i = 0; i < totalSlices; i++) {
             let img = new Image();
             let paddedIndex = i.toString().padStart(3, "0");
-            img.src = `slices_${axis}/slice_${paddedIndex}.png`;
+
+            // NEW: Uses dynamic folder prefix
+            img.src = `${folderPrefix}${axis}/slice_${paddedIndex}.png`;
 
             img.onload = () => {
                 imagesLoaded++;
@@ -291,7 +297,8 @@ btnToggleAnnotations.addEventListener("click", () => {
 
 // --- 7. Task Setup & Draw Loop ---
 function resetTask() {
-    taskActive = false;
+    taskActive = false; chkPlayground.disabled = false;
+    btnFinish.innerText = chkPlayground.checked ? "FINISH PRACTICE" : "FINISH & EXPORT";
     totalSlices = parseInt(inputTotalSlices.value) || 100;
 
     showAnnotations = true;
@@ -511,8 +518,13 @@ document.addEventListener("keydown", (e) => {
     else if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") stepSlice(1);
 });
 
+chkPlayground.addEventListener("change", () => {
+    if (!taskActive) resetTask();
+});
+
 // --- 10. Task Execution ---
 btnStart.addEventListener("click", () => {
+    chkPlayground.disabled = true;
     taskActive = true;
     startTime = Date.now();
     overlay.style.display = "none";
@@ -534,7 +546,23 @@ btnFinish.addEventListener("click", () => {
 
     safelySaveCurrentZ();
 
-    exportData(((Date.now() - startTime) / 1000).toFixed(2));
+    if (chkPlayground.checked) {
+        // PLAYGROUND MODE: End task, do NOT export data
+        overlayText.innerText = `Practice Complete!`;
+        overlaySubtext.innerHTML = `Uncheck <b>Playground Mode</b> to load the real dataset.`;
+        overlaySubtext.style.display = "block";
+        overlay.style.display = "flex";
+
+        btnToggleAnnotations.disabled = true;
+        sliceSlider.disabled = true;
+        btnPrevSlice.disabled = true;
+        btnNextSlice.disabled = true;
+        btnFinish.disabled = true;
+        chkPlayground.disabled = false; // Let them uncheck it
+    } else {
+        // REAL TASK: Export the JSON
+        exportData(((Date.now() - startTime) / 1000).toFixed(2));
+    }
 });
 
 btnRestart.addEventListener("click", () => {
